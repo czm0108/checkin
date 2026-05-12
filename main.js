@@ -40,8 +40,16 @@ const glados = async () => {
 const longfor = async () => {
   const notice = []
   if (!process.env.LONGFOR) return
-  for (const account of String(process.env.LONGFOR).split('\n')) {
+  const accounts = String(process.env.LONGFOR).split('\n')
+  
+  console.log(`检测到 ${accounts.length} 个龙湖账户配置`)
+  
+  for (let i = 0; i < accounts.length; i++) {
+    const account = accounts[i]
     if (!account) continue
+    
+    console.log(`正在处理第 ${i+1} 个账户配置`)
+    
     try {
       // 支持两种格式：旧格式（6个字段）和新格式（7个字段用于区分平台）
       const fields = account.split('|')
@@ -55,12 +63,14 @@ const longfor = async () => {
         // 新格式：支持区分小程序和APP
         [userToken, buCode, apiKey, dxRiskToken, activityNo, cookie, platform] = fields
       } else {
-        throw new Error('龙湖签到参数格式错误，应为: userToken|buCode|apiKey|dxRiskToken|activityNo|cookie|[platform]')
+        throw new Error(`参数格式错误，应为7个字段，实际为${fields.length}个字段: ${account}`)
       }
       
       if (!userToken || !buCode || !apiKey || !dxRiskToken || !activityNo) {
         throw new Error('龙湖签到参数不完整，格式应为: userToken|buCode|apiKey|dxRiskToken|activityNo|cookie|[platform]')
       }
+
+      console.log(`账户平台: ${platform}, 用户Token前8位: ${userToken.substring(0, 8)}`)
 
       // 根据平台设置不同的请求头
       let userAgent, dxRiskSource, channel
@@ -102,6 +112,10 @@ const longfor = async () => {
         headers['Cookie'] = cookie
       }
 
+      console.log(`发送请求到: https://gw2c-hw-open.longfor.com/lmarketing-task-api-mvc-prod/openapi/task/v1/signature/clock`)
+      console.log(`请求Headers (部分): Host=${headers['Host']}, X-LF-UserToken=${headers['X-LF-UserToken']}, X-LF-Bu-Code=${headers['X-LF-Bu-Code']}, X-LF-Channel=${headers['X-LF-Channel']}, X-LF-DXRisk-Source=${headers['X-LF-DXRisk-Source']}`)
+      console.log(`请求Body: {"activity_no":"${activityNo}"}`)
+
       const response = await fetch('https://gw2c-hw-open.longfor.com/lmarketing-task-api-mvc-prod/openapi/task/v1/signature/clock', {
         method: 'POST',
         headers: headers,
@@ -109,6 +123,8 @@ const longfor = async () => {
           'activity_no': activityNo
         })
       }).then(r => r.json())
+
+      console.log(`API响应:`, JSON.stringify(response))
 
       // 处理API响应
       if (response?.code !== '0000') {
@@ -154,13 +170,17 @@ const longfor = async () => {
         )
       }
     } catch (error) {
+      console.error(`处理第 ${i+1} 个账户时发生错误:`, error.message || error)
       notice.push(
         'Longfor Checkin Error',
-        `${error.message || error}`,
+        `账户序号: ${i+1}`,
+        `错误详情: ${error.message || error}`,
         `<${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}>`
       )
     }
   }
+  
+  console.log(`龙湖签到处理完成，共产生 ${notice.length} 条通知消息`)
   return notice
 }
 
@@ -229,16 +249,26 @@ const notify = async (notice) => {
 }
 
 const main = async () => {
+  console.log("开始执行签到任务...")
+  
   // 获取GLaDOS签到结果
+  console.log("开始GLaDOS签到...")
   const gladosResult = await glados() || []
+  console.log(`GLaDOS签到完成，结果条数: ${gladosResult.length}`)
+  
   // 获取龙湖签到结果
+  console.log("开始龙湖签到...")
   const longforResult = await longfor() || []
+  console.log(`龙湖签到完成，结果条数: ${longforResult.length}`)
   
   // 合并所有结果
   const allNotices = [...gladosResult, ...longforResult]
+  console.log(`合并结果完成，总条数: ${allNotices.length}`)
   
   // 发送通知
+  console.log("开始发送通知...")
   await notify(allNotices)
+  console.log("通知发送完成")
 }
 
 main()
