@@ -43,10 +43,37 @@ const longfor = async () => {
   for (const account of String(process.env.LONGFOR).split('\n')) {
     if (!account) continue
     try {
-      const [userToken, buCode, apiKey, dxRiskToken, activityNo, cookie] = account.split('|')
+      // 支持两种格式：旧格式（6个字段）和新格式（7个字段用于区分平台）
+      const fields = account.split('|')
+      let userToken, buCode, apiKey, dxRiskToken, activityNo, cookie, platform
+      
+      if (fields.length === 6) {
+        // 旧格式：兼容小程序
+        [userToken, buCode, apiKey, dxRiskToken, activityNo, cookie] = fields
+        platform = 'miniapp' // 默认为小程序
+      } else if (fields.length === 7) {
+        // 新格式：支持区分小程序和APP
+        [userToken, buCode, apiKey, dxRiskToken, activityNo, cookie, platform] = fields
+      } else {
+        throw new Error('龙湖签到参数格式错误，应为: userToken|buCode|apiKey|dxRiskToken|activityNo|cookie|[platform]')
+      }
       
       if (!userToken || !buCode || !apiKey || !dxRiskToken || !activityNo) {
-        throw new Error('龙湖签到参数不完整，格式应为: userToken|buCode|apiKey|dxRiskToken|activityNo|cookie')
+        throw new Error('龙湖签到参数不完整，格式应为: userToken|buCode|apiKey|dxRiskToken|activityNo|cookie|[platform]')
+      }
+
+      // 根据平台设置不同的请求头
+      let userAgent, dxRiskSource, channel
+      
+      if (platform.toLowerCase() === 'app') {
+        userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 &MAIAWebKit_iOS_com.longfor.supera_1.25.0_202604231720_Default_3.3.1.0'
+        dxRiskSource = '2'
+        channel = 'L0'
+      } else {
+        // 默认为小程序
+        userAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36 MicroMessenger/6.8.0(0x16080000) NetType/WIFI MiniProgramEnv/Mac MacWechat/WMPF MacWechat/3.8.7(0x13080710) XWEB/1191'
+        dxRiskSource = '5'
+        channel = 'C2'
       }
 
       const headers = {
@@ -54,14 +81,14 @@ const longfor = async () => {
         'X-LF-UserToken': userToken,
         'X-LF-Bu-Code': buCode,
         'X-GAIA-API-KEY': apiKey,
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36 MicroMessenger/6.8.0(0x16080000) NetType/WIFI MiniProgramEnv/Mac MacWechat/WMPF MacWechat/3.8.7(0x13080710) XWEB/1191',
+        'User-Agent': userAgent,
         'Content-Type': 'application/json;charset=UTF-8',
         'Accept': 'application/json, text/plain, */*',
-        'X-LF-DXRisk-Source': '5',
+        'X-LF-DXRisk-Source': dxRiskSource,
         'X-LF-DXRisk-Captcha-Token': 'undefined',
         'X-LF-DXRisk-Token': dxRiskToken,
         'token': userToken,
-        'X-LF-Channel': 'C2',
+        'X-LF-Channel': channel,
         'Origin': 'https://longzhu.longfor.com',
         'Sec-Fetch-Site': 'same-site',
         'Sec-Fetch-Mode': 'cors',
@@ -106,6 +133,7 @@ const longfor = async () => {
         notice.push(
           'Longfor Checkin OK',
           `用户: ${userToken.substring(0, 8)}...`,
+          `平台: ${platform.toUpperCase()}`,
           `状态: 成功签到，${rewardText}`
         )
       } else if (response?.data?.is_popup === 0) {
@@ -113,6 +141,7 @@ const longfor = async () => {
         notice.push(
           'Longfor Checkin OK',
           `用户: ${userToken.substring(0, 8)}...`,
+          `平台: ${platform.toUpperCase()}`,
           `状态: 今日已签到`
         )
       } else {
@@ -120,6 +149,7 @@ const longfor = async () => {
         notice.push(
           'Longfor Checkin OK',
           `用户: ${userToken.substring(0, 8)}...`,
+          `平台: ${platform.toUpperCase()}`,
           `状态: 签到完成`
         )
       }
