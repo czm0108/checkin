@@ -36,6 +36,104 @@ const glados = async () => {
   return notice
 }
 
+// 新增龙湖签到函数
+const longfor = async () => {
+  const notice = []
+  if (!process.env.LONGFOR) return
+  for (const account of String(process.env.LONGFOR).split('\n')) {
+    if (!account) continue
+    try {
+      const [userToken, buCode, apiKey, dxRiskToken, activityNo, cookie] = account.split('|')
+      
+      if (!userToken || !buCode || !apiKey || !dxRiskToken || !activityNo) {
+        throw new Error('龙湖签到参数不完整，格式应为: userToken|buCode|apiKey|dxRiskToken|activityNo|cookie')
+      }
+
+      const headers = {
+        'Host': 'gw2c-hw-open.longfor.com',
+        'X-LF-UserToken': userToken,
+        'X-LF-Bu-Code': buCode,
+        'X-GAIA-API-KEY': apiKey,
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36 MicroMessenger/6.8.0(0x16080000) NetType/WIFI MiniProgramEnv/Mac MacWechat/WMPF MacWechat/3.8.7(0x13080710) XWEB/1191',
+        'Content-Type': 'application/json;charset=UTF-8',
+        'Accept': 'application/json, text/plain, */*',
+        'X-LF-DXRisk-Source': '5',
+        'X-LF-DXRisk-Captcha-Token': 'undefined',
+        'X-LF-DXRisk-Token': dxRiskToken,
+        'token': userToken,
+        'X-LF-Channel': 'C2',
+        'Origin': 'https://longzhu.longfor.com',
+        'Sec-Fetch-Site': 'same-site',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Dest': 'empty',
+        'Referer': 'https://longzhu.longfor.com/',
+        'Accept-Language': 'zh-CN,zh;q=0.9'
+      }
+      
+      // 如果提供了cookie，则添加到headers中
+      if (cookie) {
+        headers['Cookie'] = cookie
+      }
+
+      const response = await fetch('https://gw2c-hw-open.longfor.com/lmarketing-task-api-mvc-prod/openapi/task/v1/signature/clock', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({
+          'activity_no': activityNo
+        })
+      }).then(r => r.json())
+
+      // 处理API响应
+      if (response?.code !== '0000') {
+        throw new Error(`${response?.message || '龙湖签到失败'} [错误码: ${response?.code}]`)
+      }
+      
+      // 根据is_popup字段判断签到状态
+      if (response?.data?.is_popup === 1) {
+        // 未签到，已获得奖励
+        const rewardInfo = response?.data?.reward_info
+        let rewardText = '未知奖励'
+        
+        if (rewardInfo && Array.isArray(rewardInfo) && rewardInfo.length > 0) {
+          const reward = rewardInfo[0]
+          if (reward.reward_type === 20) {
+            rewardText = `获得${reward.reward_num}积分`
+          } else {
+            rewardText = `获得${reward.reward_num}奖励`
+          }
+        }
+        
+        notice.push(
+          'Longfor Checkin OK',
+          `用户: ${userToken.substring(0, 8)}...`,
+          `状态: 成功签到，${rewardText}`
+        )
+      } else if (response?.data?.is_popup === 0) {
+        // 已签到
+        notice.push(
+          'Longfor Checkin OK',
+          `用户: ${userToken.substring(0, 8)}...`,
+          `状态: 今日已签到`
+        )
+      } else {
+        // 其他情况
+        notice.push(
+          'Longfor Checkin OK',
+          `用户: ${userToken.substring(0, 8)}...`,
+          `状态: 签到完成`
+        )
+      }
+    } catch (error) {
+      notice.push(
+        'Longfor Checkin Error',
+        `${error.message || error}`,
+        `<${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}>`
+      )
+    }
+  }
+  return notice
+}
+
 const notify = async (notice) => {
   if (!process.env.NOTIFY || !notice) return
   for (const option of String(process.env.NOTIFY).split('\n')) {
@@ -101,7 +199,16 @@ const notify = async (notice) => {
 }
 
 const main = async () => {
-  await notify(await glados())
+  // 获取GLaDOS签到结果
+  const gladosResult = await glados() || []
+  // 获取龙湖签到结果
+  const longforResult = await longfor() || []
+  
+  // 合并所有结果
+  const allNotices = [...gladosResult, ...longforResult]
+  
+  // 发送通知
+  await notify(allNotices)
 }
 
 main()
