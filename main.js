@@ -7,7 +7,10 @@ const glados = async () => {
       const common = {
         'cookie': cookie,
         'referer': 'https://glados.cloud/console/checkin',
-        'user-agent': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)',
+        'origin': 'https://glados.cloud',
+        'accept': 'application/json, text/plain, */*',
+        'content-type': 'application/json;charset=UTF-8',
+        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 QuarkPC/7.3.5.1009', 
       }
       const action = await fetch('https://glados.cloud/api/user/checkin', {
         method: 'POST',
